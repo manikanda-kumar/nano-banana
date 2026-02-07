@@ -801,7 +801,7 @@
   'use strict';
 
   const MAX_EXCERPT_LENGTH = 1200;
-  const MIN_READABLE_CONTENT_LENGTH = 50; // Minimum content length for URL-loaded articles.
+  const MIN_READABLE_CONTENT_LENGTH = 50; // Minimum content length for URL-loaded content.
   const DEFAULT_LOADING_TEXT = 'Opening book...';
   const URL_METADATA_PREFIXES = ['title:', 'url source:', 'published time:', 'author:']; // Normalized to lowercase with spaces after colons stripped.
 
@@ -1068,7 +1068,7 @@
 
     let paragraphs = text.split(/\n\s*\n/);
     if (paragraphs.length === 1) {
-      // Some reader outputs return a single text block without blank lines, so fall back to single newlines (empty paragraphs filtered below).
+      // Some reader outputs return a single text block without blank lines, so fall back to splitting on single newlines (empty paragraphs filtered below).
       paragraphs = text.split(/\n+/);
     }
 
