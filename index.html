@@ -880,7 +880,7 @@
   btnLoadUrl.addEventListener('click', () => {
     const value = urlInput.value.trim();
     if (!value) {
-      alert('Please enter a URL starting with http:// or https://.');
+      alert('Please enter a URL.');
       return;
     }
     loadUrl(value);
@@ -978,9 +978,9 @@
     try {
       const normalizedUrl = normalizeUrlInput(inputUrl);
       const parsedUrl = new URL(normalizedUrl);
-      const protocolScheme = parsedUrl.protocol === 'https:' ? 'https' : 'http';
+      const protocol = parsedUrl.protocol === 'https:' ? 'https' : 'http';
       const sourceHost = parsedUrl.hostname;
-      const readerUrl = `https://r.jina.ai/${protocolScheme}://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+      const readerUrl = `https://r.jina.ai/${protocol}://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
       const response = await fetch(readerUrl);
 
       if (!response.ok) {
@@ -1068,7 +1068,7 @@
 
     let paragraphs = text.split(/\n\s*\n/);
     if (paragraphs.length === 1) {
-      // Some reader outputs return text without blank lines, so fall back to single newlines.
+      // Some reader outputs return a single text block without blank lines, so fall back to single newlines.
       paragraphs = text.split(/\n+/);
     }
 
