@@ -880,7 +880,7 @@
   btnLoadUrl.addEventListener('click', () => {
     const value = urlInput.value.trim();
     if (!value) {
-      alert('URL must start with http:// or https://.');
+      alert('Please enter a URL.');
       return;
     }
     loadUrl(value);
@@ -1068,7 +1068,7 @@
 
     let paragraphs = text.split(/\n\s*\n/);
     if (paragraphs.length === 1) {
-      // Some reader outputs return a single text block without blank lines, so fall back to single newlines (empties filtered below).
+      // Some reader outputs return a single text block without blank lines, so fall back to single newlines (empty paragraphs filtered below).
       paragraphs = text.split(/\n+/);
     }
 
