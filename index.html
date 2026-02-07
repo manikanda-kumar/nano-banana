@@ -801,9 +801,9 @@
   'use strict';
 
   const MAX_EXCERPT_LENGTH = 1200;
-  const MIN_READABLE_CONTENT_LENGTH = 50; // Minimum content length for URL-loaded content.
+  const MIN_READABLE_CONTENT_LENGTH = 50; // Minimum content length for URL-loaded content to avoid empty/metadata-only pages.
   const DEFAULT_LOADING_TEXT = 'Opening book...';
-  const URL_METADATA_PREFIXES = ['title:', 'url source:', 'published time:', 'author:']; // Normalized to lowercase with spaces after colons stripped.
+  const URL_METADATA_PREFIXES = ['title:', 'url source:', 'published time:', 'author:']; // Normalized to lowercase with whitespace after colons stripped.
 
   const TECHNICAL_STYLES = new Set(['diagram', 'whiteboard', 'infographic', 'conceptmap', 'blueprint', 'notebook', 'textbook', 'chalkboard']);
 
@@ -1025,14 +1025,18 @@
     return parsed.toString();
   }
 
+  function normalizeMetadataLine(line) {
+    return line.trim().toLowerCase().replace(/:\s+/g, ':');
+  }
+
   function extractUrlText(rawText, sourceHost) {
     const lines = rawText.split('\n').map(line => line.trimEnd());
-    const titleLine = lines.find(line => line.trim().toLowerCase().replace(/:\s+/g, ':').startsWith('title:'));
+    const titleLine = lines.find(line => normalizeMetadataLine(line).startsWith('title:'));
     const fallbackTitle = sourceHost;
     const title = titleLine ? titleLine.replace(/^title:\s*/i, '').trim() : fallbackTitle;
     const filtered = lines.filter(line => {
       if (!line.trim()) return false;
-      const normalized = line.trim().toLowerCase().replace(/:\s+/g, ':');
+      const normalized = normalizeMetadataLine(line);
       return !URL_METADATA_PREFIXES.some(prefix => normalized.startsWith(prefix));
     });
     const content = filtered.join('\n').trim();
@@ -1068,7 +1072,7 @@
 
     let paragraphs = text.split(/\n\s*\n/);
     if (paragraphs.length === 1) {
-      // Some reader outputs return a single text block without blank lines, so fall back to splitting on single newlines (empty paragraphs filtered below).
+      // Some reader outputs return a single text block without blank lines, so fall back to splitting on single newlines (leading/trailing empties filtered below).
       paragraphs = text.split(/\n+/);
     }
 
