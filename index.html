@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nano Banana — Illustrated EPUB Reader</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+  <style>
+    :root {
+      --text-color: #2c2c2c;
+      --bg-color: #faf9f7;
+      --panel-bg: #f5f4f2;
+      --accent-color: #1a4a5e;
+      --muted-color: #888;
+      --border-color: #ddd;
+      --hover-bg: rgba(26, 74, 94, 0.06);
+      --error-color: #c0392b;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text-color: #e0e0e0;
+        --bg-color: #1a1a1a;
+        --panel-bg: #222;
+        --accent-color: #7db8c9;
+        --muted-color: #888;
+        --border-color: #333;
+        --hover-bg: rgba(125, 184, 201, 0.08);
+        --error-color: #e74c3c;
+      }
+    }
+
+    body.light {
+      --text-color: #2c2c2c;
+      --bg-color: #faf9f7;
+      --panel-bg: #f5f4f2;
+      --accent-color: #1a4a5e;
+      --muted-color: #888;
+      --border-color: #ddd;
+      --hover-bg: rgba(26, 74, 94, 0.06);
+      --error-color: #c0392b;
+    }
+
+    body.dark {
+      --text-color: #e0e0e0;
+      --bg-color: #1a1a1a;
+      --panel-bg: #222;
+      --accent-color: #7db8c9;
+      --muted-color: #888;
+      --border-color: #333;
+      --hover-bg: rgba(125, 184, 201, 0.08);
+      --error-color: #e74c3c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      font-size: 18px;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      line-height: 1.7;
+      color: var(--text-color);
+      background-color: var(--bg-color);
+      transition: background-color 0.3s, color 0.3s;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* ── Landing / Drop Zone ── */
+    #landing {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    #landing h1 {
+      font-size: 2.5rem;
+      font-weight: normal;
+      color: var(--accent-color);
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    #landing .tagline {
+      font-style: italic;
+      color: var(--muted-color);
+      margin-bottom: 3rem;
+      font-size: 1.1rem;
+    }
+
+    #drop-zone {
+      width: 400px;
+      max-width: 90vw;
+      padding: 3rem 2rem;
+      border: 2px dashed var(--border-color);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    #drop-zone:hover, #drop-zone.dragover {
+      border-color: var(--accent-color);
+      background: var(--hover-bg);
+    }
+
+    #drop-zone p {
+      color: var(--muted-color);
+      font-size: 1rem;
+      text-indent: 0;
+    }
+
+    #drop-zone .icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      opacity: 0.4;
+    }
+
+    #file-input { display: none; }
+
+    /* ── Reader Layout ── */
+    #reader-container {
+      display: none;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #reader-container.active {
+      display: flex;
+      padding-top: 44px;
+    }
+
+    /* ── TOC Sidebar ── */
+    #toc-sidebar {
+      width: 280px;
+      min-width: 280px;
+      height: 100%;
+      overflow-y: auto;
+      border-right: 1px solid var(--border-color);
+      background: var(--panel-bg);
+      padding: 1.5rem 0;
+      transition: margin-left 0.3s;
+    }
+
+    #toc-sidebar.collapsed {
+      margin-left: -280px;
+    }
+
+    #toc-sidebar .book-meta {
+      padding: 0 1.5rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 1rem;
+    }
+
+    #toc-sidebar .book-meta h2 {
+      font-size: 1.1rem;
+      color: var(--accent-color);
+      font-weight: normal;
+      text-align: left;
+      margin: 0 0 0.25rem;
+    }
+
+    #toc-sidebar .book-meta .author {
+      font-size: 0.85rem;
+      color: var(--muted-color);
+      font-variant: small-caps;
+      letter-spacing: 0.05em;
+    }
+
+    #toc-list {
+      list-style: none;
+    }
+
+    #toc-list li {
+      padding: 0.4rem 1.5rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: var(--text-color);
+      transition: background 0.15s;
+      border-left: 3px solid transparent;
+    }
+
+    #toc-list li:hover {
+      background: var(--hover-bg);
+    }
+
+    #toc-list li.active {
+      border-left-color: var(--accent-color);
+      color: var(--accent-color);
+      background: var(--hover-bg);
+    }
+
+    /* ── Main Reading Pane ── */
+    #reading-pane {
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem 1rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #reader-content {
+      max-width: 38rem;
+      margin: 0 auto;
+      flex: 1;
+      width: 100%;
+    }
+
+    #reader-content .chapter-section {
+      display: none;
+    }
+
+    #reader-content .chapter-section.active-chapter {
+      display: block;
+    }
+
+    /* ── Chapter Navigation ── */
+    #chapter-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1.5rem 0 2rem;
+      max-width: 38rem;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    #chapter-nav button {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      padding: 0.4rem 1.2rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.85rem;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    #chapter-nav button:hover:not(:disabled) {
+      background: var(--hover-bg);
+    }
+
+    #chapter-nav button:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+
+    #chapter-indicator {
+      font-size: 0.8rem;
+      color: var(--muted-color);
+      min-width: 7rem;
+      text-align: center;
+    }
+
+    #reader-content h1, #reader-content h2, #reader-content h3 {
+      text-align: center;
+      font-weight: normal;
+      color: var(--accent-color);
+      margin: 2rem 0 1rem;
+      text-indent: 0;
+    }
+
+    #reader-content h1 { font-size: 1.8rem; }
+    #reader-content h2 { font-size: 1.4rem; letter-spacing: 0.02em; }
+    #reader-content h3 { font-size: 1.1rem; font-style: italic; }
+
+    #reader-content p {
+      text-indent: 1.5em;
+      margin: 0 0 0.5em;
+      text-align: justify;
+      hyphens: auto;
+    }
+
+    #reader-content h1 + p,
+    #reader-content h2 + p,
+    #reader-content h3 + p,
+    #reader-content .chapter-section > p:first-of-type {
+      text-indent: 0;
+    }
+
+    #reader-content blockquote {
+      margin: 1em 2em;
+      padding-left: 1em;
+      border-left: 2px solid var(--border-color);
+      color: var(--muted-color);
+      font-style: italic;
+    }
+
+    #reader-content ul, #reader-content ol {
+      margin: 1em 0;
+      padding-left: 2em;
+    }
+
+    #reader-content img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 1em auto;
+    }
+
+    #reader-content hr {
+      border: none;
+      border-top: 1px solid var(--border-color);
+      margin: 2rem 0;
+    }
+
+    /* ── Illustration Panel ── */
+    #image-panel {
+      width: 40vw;
+      min-width: 300px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--panel-bg);
+      border-left: 1px solid var(--border-color);
+      padding: 2rem;
+      position: relative;
+      transition: margin-right 0.3s;
+      gap: 1rem;
+    }
+
+    #image-panel.collapsed {
+      margin-right: -40vw;
+      min-width: 0;
+    }
+
+    #generated-image {
+      max-width: 100%;
+      max-height: 60vh;
+      object-fit: contain;
+      opacity: 0;
+      transform: scale(0.95);
+      transition: opacity 1.5s ease, transform 1.5s ease;
+      border-radius: 4px;
+    }
+
+    #generated-image.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    #illustration-caption {
+      font-size: 0.8rem;
+      color: var(--muted-color);
+      font-style: italic;
+      text-align: center;
+      max-width: 90%;
+      opacity: 0;
+      transition: opacity 1s ease 0.5s;
+    }
+
+    #illustration-caption.visible {
+      opacity: 1;
+    }
+
+    #illustration-placeholder {
+      color: var(--muted-color);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    #illustration-placeholder .icon {
+      font-size: 3rem;
+      opacity: 0.15;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Generate Button & Controls ── */
+    #illustration-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+      max-width: 280px;
+    }
+
+    #btn-generate {
+      background: var(--accent-color);
+      color: white;
+      border: none;
+      padding: 0.5rem 1.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.9rem;
+      transition: opacity 0.15s, transform 0.1s;
+      width: 100%;
+    }
+
+    #btn-generate:hover:not(:disabled) {
+      opacity: 0.85;
+    }
+
+    #btn-generate:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    #btn-generate:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    #panel-style-select, #panel-model-select {
+      background: var(--bg-color);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 0.35rem 0.5rem;
+      font-family: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    /* ── Status / Error Feedback ── */
+    #illustration-status {
+      font-size: 0.8rem;
+      color: var(--muted-color);
+      text-align: center;
+      min-height: 1.2em;
+      max-width: 90%;
+      transition: color 0.2s;
+    }
+
+    #illustration-status.error {
+      color: var(--error-color);
+    }
+
+    #illustration-status.generating {
+      color: var(--accent-color);
+    }
+
+    #illustration-status .spinner-inline {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 1.5px solid var(--border-color);
+      border-top-color: var(--accent-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: none;
+      align-items: center;
+      padding: 0 1rem;
+      z-index: 200;
+      gap: 0.5rem;
+    }
+
+    #toolbar.active {
+      display: flex;
+    }
+
+    .toolbar-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+      transition: background 0.15s;
+    }
+
+    .toolbar-btn:hover {
+      background: var(--hover-bg);
+    }
+
+    .toolbar-btn.active-toggle {
+      background: var(--accent-color);
+      color: white;
+      border-color: var(--accent-color);
+    }
+
+    #toolbar .book-title {
+      font-size: 0.85rem;
+      color: var(--muted-color);
+      flex: 1;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .toolbar-spacer { flex: 1; }
+
+    /* ── API Key Modal ── */
+    #api-key-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+    }
+
+    #api-key-modal.visible {
+      display: flex;
+    }
+
+    #api-key-modal .modal-content {
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 2rem;
+      max-width: 400px;
+      width: 90%;
+      font-family: Georgia, serif;
+    }
+
+    #api-key-modal h3 {
+      font-weight: normal;
+      color: var(--accent-color);
+      margin-bottom: 1rem;
+      font-size: 1.2rem;
+    }
+
+    #api-key-modal input {
+      width: 100%;
+      padding: 0.5rem;
+      margin: 0.5rem 0;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-family: inherit;
+      background: var(--bg-color);
+      color: var(--text-color);
+    }
+
+    #api-key-modal button {
+      background: var(--accent-color);
+      color: white;
+      border: none;
+      padding: 0.5rem 1.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      margin-top: 0.5rem;
+    }
+
+    #api-key-modal .hint {
+      font-size: 0.8rem;
+      color: var(--muted-color);
+      margin-top: 0.5rem;
+    }
+
+    #api-key-modal .hint a {
+      color: var(--accent-color);
+    }
+
+    /* ── Progress Bar ── */
+    #progress-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      height: 2px;
+      background: var(--accent-color);
+      transition: width 0.2s ease;
+      z-index: 200;
+      opacity: 0.5;
+    }
+
+    /* ── Loading overlay for EPUB parsing ── */
+    #parse-loading {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+      color: var(--muted-color);
+      gap: 1rem;
+    }
+
+    #parse-loading.active {
+      display: flex;
+    }
+
+    #parse-loading .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--accent-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1000px) {
+      #image-panel {
+        display: none;
+      }
+      #toc-sidebar {
+        position: fixed;
+        left: 0;
+        top: 44px;
+        z-index: 150;
+        height: calc(100vh - 44px);
+        box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+      }
+      #toc-sidebar.collapsed {
+        margin-left: -280px;
+      }
+      #reader-content {
+        max-width: 100%;
+        padding: 0 0.5rem;
+      }
+    }
+
+    @media (max-width: 600px) {
+      html { font-size: 16px; }
+      #landing h1 { font-size: 2rem; }
+      #drop-zone { width: 90vw; padding: 2rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Landing Page -->
+  <div id="landing">
+    <h1>Nano Banana</h1>
+    <p class="tagline">AI-illustrated EPUB reader</p>
+    <div id="drop-zone">
+      <div class="icon">📖</div>
+      <p>Drop an EPUB file here, or click to browse</p>
+    </div>
+    <input type="file" id="file-input" accept=".epub">
+  </div>
+
+  <!-- Parse Loading -->
+  <div id="parse-loading">
+    <div class="spinner"></div>
+    <p>Opening book...</p>
+  </div>
+
+  <!-- Reader -->
+  <div id="reader-container">
+    <!-- TOC Sidebar -->
+    <nav id="toc-sidebar">
+      <div class="book-meta">
+        <h2 id="book-title-sidebar"></h2>
+        <div class="author" id="book-author-sidebar"></div>
+      </div>
+      <ul id="toc-list"></ul>
+    </nav>
+
+    <!-- Reading Pane -->
+    <div id="reading-pane">
+      <div id="reader-content"></div>
+      <div id="chapter-nav">
+        <button id="btn-prev" disabled>← Previous</button>
+        <span id="chapter-indicator">—</span>
+        <button id="btn-next" disabled>Next →</button>
+      </div>
+    </div>
+
+    <!-- Illustration Panel -->
+    <div id="image-panel">
+      <div id="illustration-placeholder">
+        <div class="icon">🎨</div>
+        <p>Select a style and click Generate to illustrate the current chapter</p>
+      </div>
+      <img id="generated-image" alt="AI-generated illustration">
+      <p id="illustration-caption"></p>
+      <div id="illustration-controls">
+        <select id="panel-model-select" title="Model">
+          <option value="google/gemini-2.5-flash-image">Nano Banana Flash — $0.039/img</option>
+          <option value="google/gemini-3-pro-image-preview">Nano Banana Pro — $0.134/img</option>
+        </select>
+        <select id="panel-style-select" title="Illustration style">
+          <optgroup label="Technical">
+            <option value="diagram">Architecture Diagram</option>
+            <option value="whiteboard">Whiteboard Sketch</option>
+            <option value="infographic">Infographic</option>
+            <option value="conceptmap">Concept Map</option>
+            <option value="blueprint">Technical Blueprint</option>
+            <option value="notebook">Engineer's Notebook</option>
+            <option value="textbook">Textbook Figure</option>
+            <option value="chalkboard">Chalkboard</option>
+          </optgroup>
+          <optgroup label="Fiction">
+            <option value="renaissance">Renaissance Engraving</option>
+            <option value="watercolor">Watercolor</option>
+            <option value="manga">Manga / Anime</option>
+            <option value="pencil">Pencil Sketch</option>
+            <option value="woodblock">Japanese Woodblock</option>
+            <option value="comic">Comic Book</option>
+            <option value="oil">Oil Painting</option>
+            <option value="pixel">Pixel Art</option>
+          </optgroup>
+        </select>
+        <button id="btn-generate">Generate Illustration</button>
+      </div>
+      <div id="illustration-status"></div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <button class="toolbar-btn" id="btn-toc" title="Table of Contents">☰</button>
+    <button class="toolbar-btn" id="btn-back" title="Open another book">← Book</button>
+    <span class="book-title" id="book-title-toolbar"></span>
+    <button class="toolbar-btn" id="btn-illustrations" title="Toggle illustration panel">🎨</button>
+    <button class="toolbar-btn" id="btn-theme" title="Toggle dark mode">◐</button>
+  </div>
+
+  <!-- Progress Bar -->
+  <div id="progress-bar"></div>
+
+  <!-- API Key Modal -->
+  <div id="api-key-modal">
+    <div class="modal-content">
+      <h3>OpenRouter API Key</h3>
+      <p style="font-size: 0.9rem; color: var(--muted-color); margin-bottom: 0.5rem;">
+        Enter your OpenRouter API key to enable AI illustrations while you read.
+      </p>
+      <input type="password" id="api-key-input" placeholder="sk-or-v1-...">
+      <button id="save-api-key">Save</button>
+      <p class="hint">
+        Get a key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>
+      </p>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  const MAX_EXCERPT_LENGTH = 1200;
+
+  const TECHNICAL_STYLES = new Set(['diagram', 'whiteboard', 'infographic', 'conceptmap', 'blueprint', 'notebook', 'textbook', 'chalkboard']);
+
+  const ILLUSTRATION_STYLES = {
+    diagram: 'Clean technical architecture diagram on white background. Labeled boxes connected by arrows showing data flow, control flow, or dependencies. Color-coded components by layer (blue for interfaces, green for logic, orange for data/storage). Include concise labels on nodes and edges. Professional system-design style, precise and readable.',
+    whiteboard: 'Hand-drawn whiteboard sketch on white background using marker-style strokes in blue, black, red, and green. Boxes, arrows, rough diagrams, circled key terms, underlined concepts. Casual but clear, like a senior engineer explaining at a whiteboard. May include small annotations and emphasis marks.',
+    infographic: 'Modern infographic with a clean grid layout, icon-based visual metaphors, data callouts, numbered steps, or comparison panels. Flat design with a muted professional palette. Visualize relationships, proportions, or workflows from the concepts in the text. Minimal text, rely on visual hierarchy.',
+    conceptmap: 'Concept map or mind map with a central idea branching out to related concepts. Use rounded nodes, colored branches per subtopic, and labeled connections showing relationships (e.g., "uses", "depends on", "extends"). Clean and hierarchical, easy to follow at a glance.',
+    blueprint: 'Technical blueprint style on dark blue background with white/cyan line art. Precise geometric shapes, labeled dimensions or parameters, cross-section views, and engineering drawing conventions. Evokes hardware schematics, network topology, or system blueprints.',
+    notebook: 'Engineer\'s notebook page on graph paper. Hand-drawn diagrams, equations, pseudocode snippets, margin annotations, and small illustrative sketches in pen. Organized but personal, like working notes from someone thinking through the problem. Blue and black ink with occasional red highlights.',
+    textbook: 'Polished textbook figure with clean vector-style rendering. Numbered labels, a caption area, clear legend if needed. Neutral academic palette. Could be a process diagram, layered architecture, state machine, or annotated component view appropriate to the subject matter.',
+    chalkboard: 'Chalkboard style with a dark green/black background and chalk-white drawings. Hand-lettered labels, box diagrams, arrows, and occasional colored chalk highlights (yellow, pink). Academic lecture feel, like a professor drawing during a class.',
+    renaissance: 'Single-color (black on white) Renaissance-style engraved line illustration, da Vinci sketchbook aesthetic, fine pen-and-ink cross-hatching, contour line texture, woodcut etching look, black ink on white, no background, symmetrical composition, detailed shading built from line density. No text, no labels, no captions, no drawn borders or frames. Just the subject free-floating, maybe with a subtle scene around them.',
+    watercolor: 'Delicate watercolor illustration with soft washes, bleeding edges, and translucent layers. Muted, earthy palette with subtle color blending. Loose brushwork with visible paper texture. Artistic and evocative, not literal. No text or labels.',
+    manga: 'Black and white manga-style illustration with dynamic composition, expressive characters, screen tones for shading, speed lines for action, and dramatic panel-like framing. Clean inking with varying line weights. No text bubbles or dialogue.',
+    pencil: 'Detailed pencil sketch with soft graphite shading, cross-hatching, and careful attention to light and shadow. Rendered on cream paper with visible pencil strokes and subtle smudging. Realistic proportions with artistic interpretation. No text.',
+    woodblock: 'Japanese ukiyo-e woodblock print style with flat areas of color, bold outlines, decorative patterns, and dramatic composition. Limited color palette. Stylized waves, clouds, or natural elements. No text or kanji.',
+    comic: 'Bold comic book illustration with strong inking, dramatic shadows, dynamic poses, and vibrant but limited color palette. Halftone dot patterns for mid-tones. Action-oriented composition with depth. No speech bubbles or text.',
+    oil: 'Classical oil painting style with rich, deep colors, visible brushstrokes, dramatic chiaroscuro lighting, and atmospheric depth. Reminiscent of Dutch Golden Age or Romantic era paintings. Warm tones with careful attention to light. No text.',
+    pixel: '16-bit pixel art illustration with a limited but carefully chosen color palette, dithering for gradients, and clear iconic shapes. Retro game aesthetic with attention to detail at small scale. No text.'
+  };
+
+  // ── State ──
+  let currentZip = null;
+  let opfDir = '';
+  let manifest = {};
+  let spine = [];
+  let toc = [];
+  let blobUrls = {};
+  let bookTitle = '';
+  let bookAuthor = '';
+  let isGenerating = false;
+  let apiKey = localStorage.getItem('openrouter_api_key') || '';
+  let currentAbortController = null;
+  let illustrationsPanelOpen = true;
+  let imageCache = new Map();
+  let currentChapterIndex = 0;
+
+  // ── Elements ──
+  const landing = document.getElementById('landing');
+  const parseLoading = document.getElementById('parse-loading');
+  const readerContainer = document.getElementById('reader-container');
+  const readingPane = document.getElementById('reading-pane');
+  const readerContent = document.getElementById('reader-content');
+  const tocSidebar = document.getElementById('toc-sidebar');
+  const tocList = document.getElementById('toc-list');
+  const imagePanel = document.getElementById('image-panel');
+  const generatedImage = document.getElementById('generated-image');
+  const illustrationCaption = document.getElementById('illustration-caption');
+  const illustrationPlaceholder = document.getElementById('illustration-placeholder');
+  const illustrationStatus = document.getElementById('illustration-status');
+  const toolbar = document.getElementById('toolbar');
+  const progressBar = document.getElementById('progress-bar');
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const apiKeyModal = document.getElementById('api-key-modal');
+  const apiKeyInput = document.getElementById('api-key-input');
+  const panelStyleSelect = document.getElementById('panel-style-select');
+  const panelModelSelect = document.getElementById('panel-model-select');
+  const btnGenerate = document.getElementById('btn-generate');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const chapterIndicator = document.getElementById('chapter-indicator');
+
+  // ── File Loading ──
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) loadEpub(e.target.files[0]);
+  });
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) loadEpub(e.dataTransfer.files[0]);
+  });
+
+  // ── EPUB Parsing ──
+  async function loadEpub(file) {
+    landing.style.display = 'none';
+    parseLoading.classList.add('active');
+
+    try {
+      const buffer = await file.arrayBuffer();
+      currentZip = await JSZip.loadAsync(buffer);
+
+      const containerXml = await currentZip.file('META-INF/container.xml').async('text');
+      const containerDoc = new DOMParser().parseFromString(containerXml, 'application/xml');
+      const rootfilePath = containerDoc.querySelector('rootfile').getAttribute('full-path');
+      opfDir = rootfilePath.includes('/') ? rootfilePath.substring(0, rootfilePath.lastIndexOf('/') + 1) : '';
+
+      const opfXml = await currentZip.file(rootfilePath).async('text');
+      const opfDoc = new DOMParser().parseFromString(opfXml, 'application/xml');
+
+      const ns = opfDoc.querySelector('metadata');
+      bookTitle = getTextContent(ns, 'title') || file.name.replace('.epub', '');
+      bookAuthor = getTextContent(ns, 'creator') || '';
+
+      manifest = {};
+      opfDoc.querySelectorAll('manifest item').forEach(item => {
+        manifest[item.getAttribute('id')] = {
+          href: item.getAttribute('href'),
+          mediaType: item.getAttribute('media-type'),
+          properties: item.getAttribute('properties') || ''
+        };
+      });
+
+      spine = [];
+      opfDoc.querySelectorAll('spine itemref').forEach(ref => {
+        const id = ref.getAttribute('idref');
+        if (manifest[id]) {
+          spine.push({ id, href: manifest[id].href, mediaType: manifest[id].mediaType });
+        }
+      });
+
+      toc = await parseToc(opfDoc);
+      await preloadResources();
+      await renderChapters();
+
+      parseLoading.classList.remove('active');
+      readerContainer.classList.add('active');
+      toolbar.classList.add('active');
+      document.getElementById('book-title-sidebar').textContent = bookTitle;
+      document.getElementById('book-author-sidebar').textContent = bookAuthor;
+      document.getElementById('book-title-toolbar').textContent = bookTitle;
+      document.title = bookTitle + ' — Nano Banana';
+
+      renderToc();
+      goToChapter(0);
+
+      if (!apiKey) {
+        apiKeyModal.classList.add('visible');
+      }
+
+    } catch (err) {
+      console.error('Failed to parse EPUB:', err);
+      parseLoading.classList.remove('active');
+      landing.style.display = 'flex';
+      alert('Failed to open EPUB: ' + err.message);
+    }
+  }
+
+  function getTextContent(parent, localName) {
+    if (!parent) return '';
+    const el = parent.querySelector(localName) ||
+               parent.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', localName)[0];
+    return el ? el.textContent.trim() : '';
+  }
+
+  async function parseToc(opfDoc) {
+    const navItem = Object.values(manifest).find(m => m.properties.includes('nav'));
+    if (navItem) {
+      try {
+        const navHtml = await currentZip.file(opfDir + navItem.href).async('text');
+        const navDoc = new DOMParser().parseFromString(navHtml, 'application/xhtml+xml');
+        const navEl = navDoc.querySelector('nav[*|type="toc"], nav.toc, nav');
+        if (navEl) {
+          const items = [];
+          navEl.querySelectorAll('a').forEach(a => {
+            items.push({ label: a.textContent.trim(), href: a.getAttribute('href') });
+          });
+          if (items.length > 0) return items;
+        }
+      } catch (e) { /* fallback to NCX */ }
+    }
+
+    const ncxItem = Object.values(manifest).find(m => m.mediaType === 'application/x-dtbncx+xml');
+    if (ncxItem) {
+      try {
+        const ncxXml = await currentZip.file(opfDir + ncxItem.href).async('text');
+        const ncxDoc = new DOMParser().parseFromString(ncxXml, 'application/xml');
+        const items = [];
+        ncxDoc.querySelectorAll('navPoint').forEach(np => {
+          const label = np.querySelector('navLabel text');
+          const content = np.querySelector('content');
+          if (label && content) {
+            items.push({ label: label.textContent.trim(), href: content.getAttribute('src') });
+          }
+        });
+        if (items.length > 0) return items;
+      } catch (e) { /* fallback */ }
+    }
+
+    return spine.map((s, i) => ({ label: 'Chapter ' + (i + 1), href: s.href }));
+  }
+
+  async function preloadResources() {
+    const promises = [];
+    for (const [id, item] of Object.entries(manifest)) {
+      if (item.mediaType && (item.mediaType.startsWith('image/') || item.mediaType === 'text/css')) {
+        promises.push((async () => {
+          try {
+            const filePath = opfDir + item.href;
+            const zipEntry = currentZip.file(filePath);
+            if (!zipEntry) return;
+            if (item.mediaType.startsWith('image/')) {
+              const blob = await zipEntry.async('blob');
+              blobUrls[item.href] = URL.createObjectURL(blob);
+            }
+          } catch (e) { /* skip missing resources */ }
+        })());
+      }
+    }
+    await Promise.all(promises);
+  }
+
+  async function renderChapters() {
+    readerContent.innerHTML = '';
+
+    for (let i = 0; i < spine.length; i++) {
+      const spineItem = spine[i];
+      const filePath = opfDir + spineItem.href;
+      const zipEntry = currentZip.file(filePath);
+      if (!zipEntry) continue;
+
+      const html = await zipEntry.async('text');
+      let doc;
+      try {
+        doc = new DOMParser().parseFromString(html, 'application/xhtml+xml');
+        if (doc.querySelector('parsererror')) throw new Error('xhtml parse error');
+      } catch (e) {
+        doc = new DOMParser().parseFromString(html, 'text/html');
+      }
+
+      const body = doc.body || doc.documentElement;
+      if (!body) continue;
+
+      body.querySelectorAll('img').forEach(img => {
+        const src = img.getAttribute('src');
+        if (src) {
+          const resolvedSrc = resolveHref(src, spineItem.href);
+          if (blobUrls[resolvedSrc]) img.setAttribute('src', blobUrls[resolvedSrc]);
+        }
+      });
+
+      body.querySelectorAll('image').forEach(img => {
+        const href = img.getAttribute('xlink:href') || img.getAttribute('href');
+        if (href) {
+          const resolvedHref = resolveHref(href, spineItem.href);
+          if (blobUrls[resolvedHref]) {
+            img.setAttribute('href', blobUrls[resolvedHref]);
+            img.removeAttribute('xlink:href');
+          }
+        }
+      });
+
+      const sanitized = DOMPurify.sanitize(body.innerHTML, {
+        ALLOW_TAGS: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span',
+                     'em', 'i', 'strong', 'b', 'br', 'hr', 'blockquote',
+                     'ul', 'ol', 'li', 'a', 'img', 'figure', 'figcaption',
+                     'table', 'tr', 'td', 'th', 'thead', 'tbody', 'sup', 'sub',
+                     'section', 'article', 'aside', 'pre', 'code', 'svg', 'image'],
+        ALLOW_ATTR: ['src', 'alt', 'href', 'id', 'class', 'colspan', 'rowspan',
+                     'viewBox', 'width', 'height', 'xmlns', 'xlink:href',
+                     'preserveAspectRatio', 'x', 'y']
+      });
+
+      const section = document.createElement('section');
+      section.className = 'chapter-section';
+      section.id = 'chap-' + i;
+      section.dataset.spineHref = spineItem.href;
+      section.innerHTML = sanitized;
+
+      section.querySelectorAll('div:empty, span:empty, p:empty').forEach(el => {
+        if (!el.querySelector('img, br')) el.remove();
+      });
+
+      readerContent.appendChild(section);
+    }
+  }
+
+  function resolveHref(href, baseHref) {
+    if (href.startsWith('http') || href.startsWith('data:') || href.startsWith('blob:')) return href;
+    const baseDir = baseHref.includes('/') ? baseHref.substring(0, baseHref.lastIndexOf('/') + 1) : '';
+    const parts = (baseDir + href).split('/');
+    const resolved = [];
+    for (const part of parts) {
+      if (part === '..') resolved.pop();
+      else if (part !== '.') resolved.push(part);
+    }
+    return resolved.join('/');
+  }
+
+  // ── Chapter Navigation ──
+  function goToChapter(index) {
+    const sections = readerContent.querySelectorAll('.chapter-section');
+    if (index < 0 || index >= sections.length) return;
+
+    sections.forEach(s => s.classList.remove('active-chapter'));
+    sections[index].classList.add('active-chapter');
+    currentChapterIndex = index;
+
+    readingPane.scrollTop = 0;
+    updateChapterNav(sections.length);
+    updateActiveTocFromChapter(index);
+    updateProgress(index, sections.length);
+
+    generatedImage.classList.remove('visible');
+    illustrationCaption.classList.remove('visible');
+    illustrationPlaceholder.style.display = 'block';
+    setStatus('');
+  }
+
+  function updateChapterNav(total) {
+    btnPrev.disabled = currentChapterIndex <= 0;
+    btnNext.disabled = currentChapterIndex >= total - 1;
+    chapterIndicator.textContent = (currentChapterIndex + 1) + ' / ' + total;
+  }
+
+  function updateProgress(index, total) {
+    const progress = total > 1 ? (index / (total - 1)) * 100 : 100;
+    progressBar.style.width = progress + '%';
+  }
+
+  function updateActiveTocFromChapter(chapterIndex) {
+    const section = readerContent.querySelector('#chap-' + chapterIndex);
+    if (!section) return;
+    const sectionHref = section.dataset.spineHref;
+
+    const tocItems = tocList.querySelectorAll('li');
+    let bestMatch = -1;
+
+    toc.forEach((item, i) => {
+      const href = item.href.split('#')[0];
+      if (sectionHref === href || sectionHref.endsWith('/' + href) || href.endsWith(sectionHref)) {
+        bestMatch = i;
+      }
+      const hrefBase = href.replace(/^(\.\.\/)+/, '');
+      if (bestMatch < 0 && (sectionHref.includes(hrefBase) || hrefBase.includes(sectionHref))) {
+        bestMatch = i;
+      }
+    });
+
+    tocItems.forEach((li, i) => li.classList.toggle('active', i === bestMatch));
+
+    if (bestMatch >= 0 && tocItems[bestMatch]) {
+      tocItems[bestMatch].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  btnPrev.addEventListener('click', () => goToChapter(currentChapterIndex - 1));
+  btnNext.addEventListener('click', () => goToChapter(currentChapterIndex + 1));
+
+  // ── TOC Rendering ──
+  function renderToc() {
+    tocList.innerHTML = '';
+    toc.forEach((item, idx) => {
+      const li = document.createElement('li');
+      li.textContent = item.label;
+      li.addEventListener('click', () => {
+        navigateToTocItem(item);
+        if (window.innerWidth <= 1000) tocSidebar.classList.add('collapsed');
+      });
+      tocList.appendChild(li);
+    });
+  }
+
+  function navigateToTocItem(item) {
+    const href = item.href.split('#')[0];
+    const fragment = item.href.includes('#') ? item.href.split('#')[1] : null;
+
+    const sections = readerContent.querySelectorAll('.chapter-section');
+    for (let i = 0; i < sections.length; i++) {
+      const sectionHref = sections[i].dataset.spineHref;
+      if (sectionHref === href || sectionHref.endsWith('/' + href) || href.endsWith(sectionHref)) {
+        goToChapter(i);
+        if (fragment) {
+          requestAnimationFrame(() => {
+            const target = sections[i].querySelector('#' + CSS.escape(fragment));
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        }
+        return;
+      }
+    }
+
+    for (let i = 0; i < sections.length; i++) {
+      const sectionHref = sections[i].dataset.spineHref;
+      const hrefBase = href.replace(/^(\.\.\/)+/, '');
+      if (sectionHref.includes(hrefBase) || hrefBase.includes(sectionHref)) {
+        goToChapter(i);
+        return;
+      }
+    }
+  }
+
+  // ── Visible Text for Current Chapter ──
+  function getChapterText() {
+    const section = readerContent.querySelector('.chapter-section.active-chapter');
+    if (!section) return '';
+
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 30) {
+      return selection.toString().trim().substring(0, MAX_EXCERPT_LENGTH);
+    }
+
+    const blocks = section.querySelectorAll('p, h1, h2, h3, h4, h5, h6, blockquote, li');
+    const texts = [];
+    for (const el of blocks) {
+      const text = el.textContent.trim();
+      if (text.length > 5) texts.push(text);
+      if (texts.join(' ').length > MAX_EXCERPT_LENGTH) break;
+    }
+    return texts.join(' ').substring(0, MAX_EXCERPT_LENGTH);
+  }
+
+  // ── Status Helpers ──
+  function setStatus(msg, type) {
+    illustrationStatus.className = type || '';
+    if (type === 'generating') {
+      illustrationStatus.innerHTML = '<span class="spinner-inline"></span>' + msg;
+    } else {
+      illustrationStatus.textContent = msg;
+    }
+  }
+
+  // ── Image Generation (manual) ──
+  btnGenerate.addEventListener('click', () => {
+    if (isGenerating) return;
+
+    if (!apiKey) {
+      apiKeyModal.classList.add('visible');
+      return;
+    }
+
+    const text = getChapterText();
+    if (text.length < 50) {
+      setStatus('Not enough text in this chapter to illustrate.', 'error');
+      return;
+    }
+
+    generateImage(text);
+  });
+
+  async function generateImage(text) {
+    const styleKey = panelStyleSelect.value;
+    const style = ILLUSTRATION_STYLES[styleKey] || ILLUSTRATION_STYLES.diagram;
+    const isTechnical = TECHNICAL_STYLES.has(styleKey);
+
+    const modelId = panelModelSelect.value;
+    const cacheKey = currentChapterIndex + ':' + styleKey + ':' + modelId;
+    if (imageCache.has(cacheKey)) {
+      showCachedImage(imageCache.get(cacheKey));
+      setStatus('Showing cached illustration.', '');
+      return;
+    }
+
+    const prompt = isTechnical
+      ? `You are reading a technical book titled "${bookTitle}". Visualize the key concepts, relationships, and architecture described in this passage as a clear technical diagram or visual:\n\n"${text.substring(0, 800)}"\n\nIdentify the core technical concepts (components, patterns, data flows, algorithms, layers, protocols, trade-offs) and represent them visually. Focus on making the ideas concrete and spatial — show how things connect, interact, or are structured.\n\nVisual style: ${style}`
+      : `Create an illustration for this passage from "${bookTitle}":\n\n"${text.substring(0, 800)}"\n\nStyle: ${style}`;
+
+    try {
+      isGenerating = true;
+      btnGenerate.disabled = true;
+      setStatus('Generating illustration…', 'generating');
+      illustrationPlaceholder.style.display = 'none';
+      generatedImage.classList.remove('visible');
+      illustrationCaption.classList.remove('visible');
+
+      if (currentAbortController) currentAbortController.abort();
+      currentAbortController = new AbortController();
+
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': window.location.href,
+          'X-Title': 'Nano Banana Reader'
+        },
+        signal: currentAbortController.signal,
+        body: JSON.stringify({
+          model: modelId,
+          modalities: ['image', 'text'],
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const errMsg = errData.error?.message || `HTTP ${response.status}`;
+        throw new Error(errMsg);
+      }
+
+      const data = await response.json();
+      const message = data.choices?.[0]?.message;
+
+      if (!message) {
+        throw new Error('No response from model.');
+      }
+
+      const captionText = (message.content || '').substring(0, 120);
+      const images = message.images || [];
+
+      if (images.length > 0) {
+        const imgSrc = images[0].image_url?.url;
+        if (!imgSrc) {
+          throw new Error('Image data missing from response.');
+        }
+
+        imageCache.set(cacheKey, { src: imgSrc, caption: captionText });
+
+        generatedImage.src = imgSrc;
+        illustrationCaption.textContent = captionText;
+
+        generatedImage.onload = () => {
+          generatedImage.classList.add('visible');
+          illustrationCaption.classList.add('visible');
+          setStatus('');
+        };
+
+        generatedImage.onerror = () => {
+          setStatus('Failed to decode the returned image.', 'error');
+        };
+      } else {
+        setStatus('API returned text only, no image. Try a different style or chapter.', 'error');
+        if (captionText) {
+          illustrationCaption.textContent = captionText;
+          illustrationCaption.classList.add('visible');
+        }
+      }
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        setStatus('Generation cancelled.', '');
+        return;
+      }
+      console.error('Image generation failed:', error);
+      setStatus('Error: ' + error.message, 'error');
+    } finally {
+      isGenerating = false;
+      btnGenerate.disabled = false;
+    }
+  }
+
+  function showCachedImage(cached) {
+    generatedImage.src = cached.src;
+    illustrationCaption.textContent = cached.caption;
+    illustrationPlaceholder.style.display = 'none';
+    generatedImage.classList.add('visible');
+    illustrationCaption.classList.add('visible');
+  }
+
+  // ── Toolbar Handlers ──
+  document.getElementById('btn-toc').addEventListener('click', () => {
+    tocSidebar.classList.toggle('collapsed');
+  });
+
+  document.getElementById('btn-theme').addEventListener('click', () => {
+    const isDark = document.body.classList.contains('dark');
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(isDark ? 'light' : 'dark');
+    localStorage.setItem('theme', isDark ? 'light' : 'dark');
+  });
+
+  document.getElementById('btn-illustrations').addEventListener('click', () => {
+    illustrationsPanelOpen = !illustrationsPanelOpen;
+    const btn = document.getElementById('btn-illustrations');
+    btn.classList.toggle('active-toggle', illustrationsPanelOpen);
+    imagePanel.classList.toggle('collapsed', !illustrationsPanelOpen);
+  });
+
+  document.getElementById('btn-back').addEventListener('click', () => {
+    readerContainer.classList.remove('active');
+    toolbar.classList.remove('active');
+    landing.style.display = 'flex';
+    readerContent.innerHTML = '';
+    tocList.innerHTML = '';
+    currentZip = null;
+    spine = [];
+    toc = [];
+    manifest = {};
+    currentChapterIndex = 0;
+    imageCache.clear();
+    generatedImage.classList.remove('visible');
+    illustrationCaption.classList.remove('visible');
+    illustrationPlaceholder.style.display = 'block';
+    setStatus('');
+    for (const url of Object.values(blobUrls)) URL.revokeObjectURL(url);
+    blobUrls = {};
+    progressBar.style.width = '0%';
+    fileInput.value = '';
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', e => {
+    if (!readerContainer.classList.contains('active')) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') goToChapter(currentChapterIndex - 1);
+    else if (e.key === 'ArrowRight') goToChapter(currentChapterIndex + 1);
+  });
+
+  // ── API Key ──
+  document.getElementById('save-api-key').addEventListener('click', () => {
+    apiKey = apiKeyInput.value.trim();
+    if (apiKey) {
+      localStorage.setItem('openrouter_api_key', apiKey);
+      apiKeyModal.classList.remove('visible');
+    }
+  });
+
+  apiKeyModal.addEventListener('click', e => {
+    if (e.target === apiKeyModal) apiKeyModal.classList.remove('visible');
+  });
+
+  // ── Init ──
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme) document.body.classList.add(savedTheme);
+  if (apiKey) apiKeyInput.value = apiKey;
+
+})();
+</script>
+</body>
+</html>
