@@ -801,7 +801,7 @@
   'use strict';
 
   const MAX_EXCERPT_LENGTH = 1200;
-  const MIN_READABLE_CONTENT_LENGTH = 50; // Avoid illustrating near-empty pages.
+  const MIN_READABLE_CONTENT_LENGTH = 50; // Minimum content length for URL-loaded articles.
   const DEFAULT_LOADING_TEXT = 'Opening book...';
   const URL_METADATA_PREFIXES = ['title:', 'url source:', 'published time:', 'author:'];
 
@@ -880,7 +880,7 @@
   btnLoadUrl.addEventListener('click', () => {
     const value = urlInput.value.trim();
     if (!value) {
-      alert('Please enter a URL.');
+      alert('Please enter a URL (starting with http:// or https://).');
       return;
     }
     loadUrl(value);
@@ -1068,7 +1068,7 @@
 
     let paragraphs = text.split(/\n\s*\n/);
     if (paragraphs.length === 1) {
-      // Some reader outputs return a single text block without blank lines, so fall back to single newlines.
+      // Some reader outputs return a single text block without blank lines, so fall back to single newlines (empties filtered below).
       paragraphs = text.split(/\n+/);
     }
 
