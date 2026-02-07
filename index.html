@@ -801,7 +801,7 @@
   'use strict';
 
   const MAX_EXCERPT_LENGTH = 1200;
-  const MIN_READABLE_CONTENT_LENGTH = 50;
+  const MIN_READABLE_CONTENT_LENGTH = 50; // Avoid illustrating near-empty pages.
   const DEFAULT_LOADING_TEXT = 'Opening book...';
 
   const TECHNICAL_STYLES = new Set(['diagram', 'whiteboard', 'infographic', 'conceptmap', 'blueprint', 'notebook', 'textbook', 'chalkboard']);
@@ -879,7 +879,7 @@
   btnLoadUrl.addEventListener('click', () => {
     const value = urlInput.value.trim();
     if (!value) {
-      alert('Please enter a valid URL to load.');
+      alert('Please enter a URL.');
       return;
     }
     loadUrl(value);
@@ -1015,7 +1015,7 @@
   function normalizeUrlInput(value) {
     let url = value.trim();
     if (!/^https?:\/\//i.test(url)) {
-      url = 'https://' + url;
+      throw new Error('Please include http:// or https:// in the URL.');
     }
     const parsed = new URL(url);
     if (!/^https?:$/.test(parsed.protocol)) {
