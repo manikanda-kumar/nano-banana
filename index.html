@@ -977,9 +977,9 @@
     try {
       const normalizedUrl = normalizeUrlInput(inputUrl);
       const parsedUrl = new URL(normalizedUrl);
-      const readerProtocol = parsedUrl.protocol === 'https:' ? 'https' : 'http';
+      const readerScheme = parsedUrl.protocol === 'https:' ? 'https' : 'http';
       const sourceHost = parsedUrl.hostname;
-      const readerUrl = `https://r.jina.ai/${readerProtocol}://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+      const readerUrl = `https://r.jina.ai/${readerScheme}://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
       const response = await fetch(readerUrl);
 
       if (!response.ok) {
@@ -1038,7 +1038,7 @@
     });
     const content = filtered.join('\n').trim();
     return {
-      title: title || fallbackTitle,
+      title,
       content: content || rawText.trim()
     };
   }
