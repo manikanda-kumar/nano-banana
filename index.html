@@ -803,6 +803,7 @@
   const MAX_EXCERPT_LENGTH = 1200;
   const MIN_READABLE_CONTENT_LENGTH = 50; // Avoid illustrating near-empty pages.
   const DEFAULT_LOADING_TEXT = 'Opening book...';
+  const URL_METADATA_PREFIXES = ['title:', 'url source:', 'published time:', 'author:'];
 
   const TECHNICAL_STYLES = new Set(['diagram', 'whiteboard', 'infographic', 'conceptmap', 'blueprint', 'notebook', 'textbook', 'chalkboard']);
 
@@ -879,7 +880,7 @@
   btnLoadUrl.addEventListener('click', () => {
     const value = urlInput.value.trim();
     if (!value) {
-      alert('Please enter a URL.');
+      alert('Please enter a URL starting with http:// or https://.');
       return;
     }
     loadUrl(value);
@@ -977,9 +978,9 @@
     try {
       const normalizedUrl = normalizeUrlInput(inputUrl);
       const parsedUrl = new URL(normalizedUrl);
-      const readerScheme = parsedUrl.protocol === 'https:' ? 'https' : 'http';
+      const protocolScheme = parsedUrl.protocol === 'https:' ? 'https' : 'http';
       const sourceHost = parsedUrl.hostname;
-      const readerUrl = `https://r.jina.ai/${readerScheme}://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+      const readerUrl = `https://r.jina.ai/${protocolScheme}://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
       const response = await fetch(readerUrl);
 
       if (!response.ok) {
@@ -1015,7 +1016,7 @@
   function normalizeUrlInput(value) {
     let url = value.trim();
     if (!/^https?:\/\//i.test(url)) {
-      throw new Error('Please include http:// or https:// in the URL.');
+      throw new Error('URL must start with http:// or https://.');
     }
     const parsed = new URL(url);
     if (!/^https?:$/.test(parsed.protocol)) {
@@ -1026,15 +1027,13 @@
 
   function extractUrlText(rawText, sourceHost) {
     const lines = rawText.split('\n').map(line => line.trimEnd());
-    const titleLine = lines.find(line => /^title:/i.test(line));
+    const titleLine = lines.find(line => line.trim().toLowerCase().startsWith('title:'));
     const fallbackTitle = sourceHost;
     const title = titleLine ? titleLine.replace(/^title:\s*/i, '').trim() : fallbackTitle;
     const filtered = lines.filter(line => {
       if (!line.trim()) return false;
-      return !/^title:/i.test(line)
-        && !/^url source:/i.test(line)
-        && !/^published time:/i.test(line)
-        && !/^author:/i.test(line);
+      const normalized = line.trim().toLowerCase();
+      return !URL_METADATA_PREFIXES.some(prefix => normalized.startsWith(prefix));
     });
     const content = filtered.join('\n').trim();
     return {
@@ -1069,6 +1068,7 @@
 
     let paragraphs = text.split(/\n\s*\n/);
     if (paragraphs.length === 1) {
+      // Some reader outputs return text without blank lines, so fall back to single newlines.
       paragraphs = text.split(/\n+/);
     }
 
