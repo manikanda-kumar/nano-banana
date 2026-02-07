@@ -7,13 +7,14 @@ Inspired by [@mrnugget's Moby Dick](https://github.com/mrnugget/moby-dick), but 
 ## How It Works
 
 1. Open `index.html` in your browser
-2. Drop an EPUB file (or click to browse)
+2. Drop an EPUB file (or click to browse), or paste a blog post/tweet URL
 3. Enter your [OpenRouter API key](https://openrouter.ai/keys) when prompted
 4. Read — click "Generate Illustration" to illustrate the current chapter, or select specific text to illustrate
 
 ## Features
 
 - **EPUB parsing** — Handles EPUB 2/3, TOC navigation, embedded images
+- **URL loading** — Pulls readable text from blog posts or tweets for illustration
 - **Model selection** — Choose between Nano Banana Flash (~$0.04/img) and Nano Banana Pro (~$0.13/img) via OpenRouter
 - **16 illustration styles** — Technical styles (architecture diagram, whiteboard sketch, infographic, concept map, blueprint, engineer's notebook, textbook figure, chalkboard) and fiction styles (Renaissance engraving, watercolor, manga, pencil sketch, Japanese woodblock, comic, oil painting, pixel art)
 - **Smart prompting** — Technical styles generate labeled diagrams and visual explanations; fiction styles generate atmospheric artwork

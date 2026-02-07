@@ -125,6 +125,45 @@
 
     #file-input { display: none; }
 
+    #url-loader {
+      margin-top: 1.5rem;
+      width: 400px;
+      max-width: 90vw;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    #url-loader .url-hint {
+      color: var(--muted-color);
+      font-size: 0.9rem;
+    }
+
+    #url-loader .url-controls {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    #url-input {
+      flex: 1;
+      padding: 0.5rem 0.7rem;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-family: inherit;
+      background: var(--bg-color);
+      color: var(--text-color);
+    }
+
+    #btn-load-url {
+      background: var(--accent-color);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
     /* ── Reader Layout ── */
     #reader-container {
       display: none;
@@ -653,12 +692,19 @@
       <p>Drop an EPUB file here, or click to browse</p>
     </div>
     <input type="file" id="file-input" accept=".epub">
+    <div id="url-loader">
+      <p class="url-hint">Or paste a blog post or tweet URL</p>
+      <div class="url-controls">
+        <input type="url" id="url-input" placeholder="https://example.com/post">
+        <button id="btn-load-url">Load URL</button>
+      </div>
+    </div>
   </div>
 
   <!-- Parse Loading -->
   <div id="parse-loading">
     <div class="spinner"></div>
-    <p>Opening book...</p>
+    <p id="parse-loading-text">Opening book...</p>
   </div>
 
   <!-- Reader -->
@@ -810,6 +856,8 @@
   const progressBar = document.getElementById('progress-bar');
   const dropZone = document.getElementById('drop-zone');
   const fileInput = document.getElementById('file-input');
+  const urlInput = document.getElementById('url-input');
+  const btnLoadUrl = document.getElementById('btn-load-url');
   const apiKeyModal = document.getElementById('api-key-modal');
   const apiKeyInput = document.getElementById('api-key-input');
   const panelStyleSelect = document.getElementById('panel-style-select');
@@ -818,11 +866,28 @@
   const btnPrev = document.getElementById('btn-prev');
   const btnNext = document.getElementById('btn-next');
   const chapterIndicator = document.getElementById('chapter-indicator');
+  const parseLoadingText = document.getElementById('parse-loading-text');
 
   // ── File Loading ──
   dropZone.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', e => {
     if (e.target.files[0]) loadEpub(e.target.files[0]);
+  });
+
+  btnLoadUrl.addEventListener('click', () => {
+    const value = urlInput.value.trim();
+    if (!value) {
+      alert('Enter a URL to load.');
+      return;
+    }
+    loadUrl(value);
+  });
+
+  urlInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      btnLoadUrl.click();
+    }
   });
 
   dropZone.addEventListener('dragover', e => {
@@ -839,6 +904,7 @@
   // ── EPUB Parsing ──
   async function loadEpub(file) {
     landing.style.display = 'none';
+    parseLoadingText.textContent = 'Opening book...';
     parseLoading.classList.add('active');
 
     try {
@@ -899,6 +965,133 @@
       landing.style.display = 'flex';
       alert('Failed to open EPUB: ' + err.message);
     }
+  }
+
+  async function loadUrl(inputUrl) {
+    landing.style.display = 'none';
+    parseLoadingText.textContent = 'Fetching article...';
+    parseLoading.classList.add('active');
+
+    try {
+      const normalizedUrl = normalizeUrlInput(inputUrl);
+      const parsedUrl = new URL(normalizedUrl);
+      const readerProtocol = parsedUrl.protocol === 'https:' ? 'https' : 'http';
+      const readerUrl = `https://r.jina.ai/${readerProtocol}://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+      const response = await fetch(readerUrl);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const rawText = await response.text();
+      const { title, content } = extractUrlText(rawText, normalizedUrl);
+      const trimmedContent = content.trim();
+
+      if (trimmedContent.length < 50) {
+        throw new Error('No readable text found at that URL.');
+      }
+
+      renderUrlContent(title, trimmedContent, normalizedUrl);
+      parseLoading.classList.remove('active');
+      readerContainer.classList.add('active');
+      toolbar.classList.add('active');
+
+      if (!apiKey) {
+        apiKeyModal.classList.add('visible');
+      }
+    } catch (err) {
+      console.error('Failed to load URL:', err);
+      parseLoading.classList.remove('active');
+      landing.style.display = 'flex';
+      alert('Failed to load URL: ' + err.message);
+    } finally {
+      parseLoadingText.textContent = 'Opening book...';
+    }
+  }
+
+  function normalizeUrlInput(value) {
+    let url = value.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      url = 'https://' + url;
+    }
+    const parsed = new URL(url);
+    if (!/^https?:$/.test(parsed.protocol)) {
+      throw new Error('Only http or https URLs are supported.');
+    }
+    return parsed.toString();
+  }
+
+  function extractUrlText(rawText, fallbackUrl) {
+    const lines = rawText.split('\n').map(line => line.trimEnd());
+    const titleLine = lines.find(line => /^title:/i.test(line));
+    const fallbackTitle = new URL(fallbackUrl).hostname;
+    const title = titleLine ? titleLine.replace(/^title:\s*/i, '').trim() : fallbackTitle;
+    const filtered = lines.filter(line => {
+      if (!line.trim()) return false;
+      return !/^title:/i.test(line)
+        && !/^url source:/i.test(line)
+        && !/^published time:/i.test(line)
+        && !/^author:/i.test(line);
+    });
+    const content = filtered.join('\n').trim();
+    return {
+      title: title || fallbackTitle,
+      content: content || rawText.trim()
+    };
+  }
+
+  function renderUrlContent(title, text, sourceUrl) {
+    readerContent.innerHTML = '';
+    tocList.innerHTML = '';
+    for (const url of Object.values(blobUrls)) URL.revokeObjectURL(url);
+    blobUrls = {};
+
+    bookTitle = title;
+    bookAuthor = new URL(sourceUrl).hostname;
+    currentZip = null;
+    manifest = {};
+    spine = [{ id: 'url', href: sourceUrl, mediaType: 'text/html' }];
+    toc = [{ label: title, href: sourceUrl }];
+    currentChapterIndex = 0;
+    imageCache.clear();
+
+    const section = document.createElement('section');
+    section.className = 'chapter-section';
+    section.id = 'chap-0';
+    section.dataset.spineHref = sourceUrl;
+
+    const heading = document.createElement('h2');
+    heading.textContent = title;
+    section.appendChild(heading);
+
+    let paragraphs = text.split(/\n\s*\n/);
+    if (paragraphs.length === 1) {
+      paragraphs = text.split(/\n+/);
+    }
+
+    paragraphs.forEach(paragraph => {
+      const trimmed = paragraph.trim();
+      if (!trimmed) return;
+      const p = document.createElement('p');
+      p.textContent = trimmed;
+      section.appendChild(p);
+    });
+
+    readerContent.appendChild(section);
+
+    document.getElementById('book-title-sidebar').textContent = bookTitle;
+    document.getElementById('book-author-sidebar').textContent = bookAuthor;
+    document.getElementById('book-title-toolbar').textContent = bookTitle;
+    document.title = bookTitle + ' — Nano Banana';
+
+    renderToc();
+    goToChapter(0);
+
+    generatedImage.classList.remove('visible');
+    illustrationCaption.classList.remove('visible');
+    illustrationPlaceholder.style.display = 'block';
+    setStatus('');
+    progressBar.style.width = '0%';
   }
 
   function getTextContent(parent, localName) {
@@ -1341,6 +1534,7 @@
     blobUrls = {};
     progressBar.style.width = '0%';
     fileInput.value = '';
+    urlInput.value = '';
   });
 
   // Keyboard navigation
