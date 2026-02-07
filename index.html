@@ -801,6 +801,8 @@
   'use strict';
 
   const MAX_EXCERPT_LENGTH = 1200;
+  const MIN_READABLE_CONTENT_LENGTH = 50;
+  const DEFAULT_LOADING_TEXT = 'Opening book...';
 
   const TECHNICAL_STYLES = new Set(['diagram', 'whiteboard', 'infographic', 'conceptmap', 'blueprint', 'notebook', 'textbook', 'chalkboard']);
 
@@ -877,7 +879,7 @@
   btnLoadUrl.addEventListener('click', () => {
     const value = urlInput.value.trim();
     if (!value) {
-      alert('Enter a URL to load.');
+      alert('Please enter a valid URL to load.');
       return;
     }
     loadUrl(value);
@@ -904,7 +906,7 @@
   // ── EPUB Parsing ──
   async function loadEpub(file) {
     landing.style.display = 'none';
-    parseLoadingText.textContent = 'Opening book...';
+    parseLoadingText.textContent = DEFAULT_LOADING_TEXT;
     parseLoading.classList.add('active');
 
     try {
@@ -976,6 +978,7 @@
       const normalizedUrl = normalizeUrlInput(inputUrl);
       const parsedUrl = new URL(normalizedUrl);
       const readerProtocol = parsedUrl.protocol === 'https:' ? 'https' : 'http';
+      const sourceHost = parsedUrl.hostname;
       const readerUrl = `https://r.jina.ai/${readerProtocol}://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
       const response = await fetch(readerUrl);
 
@@ -984,14 +987,14 @@
       }
 
       const rawText = await response.text();
-      const { title, content } = extractUrlText(rawText, normalizedUrl);
+      const { title, content } = extractUrlText(rawText, sourceHost);
       const trimmedContent = content.trim();
 
-      if (trimmedContent.length < 50) {
+      if (trimmedContent.length < MIN_READABLE_CONTENT_LENGTH) {
         throw new Error('No readable text found at that URL.');
       }
 
-      renderUrlContent(title, trimmedContent, normalizedUrl);
+      renderUrlContent(title, trimmedContent, normalizedUrl, sourceHost);
       parseLoading.classList.remove('active');
       readerContainer.classList.add('active');
       toolbar.classList.add('active');
@@ -1005,7 +1008,7 @@
       landing.style.display = 'flex';
       alert('Failed to load URL: ' + err.message);
     } finally {
-      parseLoadingText.textContent = 'Opening book...';
+      parseLoadingText.textContent = DEFAULT_LOADING_TEXT;
     }
   }
 
@@ -1021,10 +1024,10 @@
     return parsed.toString();
   }
 
-  function extractUrlText(rawText, fallbackUrl) {
+  function extractUrlText(rawText, sourceHost) {
     const lines = rawText.split('\n').map(line => line.trimEnd());
     const titleLine = lines.find(line => /^title:/i.test(line));
-    const fallbackTitle = new URL(fallbackUrl).hostname;
+    const fallbackTitle = sourceHost;
     const title = titleLine ? titleLine.replace(/^title:\s*/i, '').trim() : fallbackTitle;
     const filtered = lines.filter(line => {
       if (!line.trim()) return false;
@@ -1040,14 +1043,14 @@
     };
   }
 
-  function renderUrlContent(title, text, sourceUrl) {
+  function renderUrlContent(title, text, sourceUrl, sourceHost) {
     readerContent.innerHTML = '';
     tocList.innerHTML = '';
     for (const url of Object.values(blobUrls)) URL.revokeObjectURL(url);
     blobUrls = {};
 
     bookTitle = title;
-    bookAuthor = new URL(sourceUrl).hostname;
+    bookAuthor = sourceHost;
     currentZip = null;
     manifest = {};
     spine = [{ id: 'url', href: sourceUrl, mediaType: 'text/html' }];
