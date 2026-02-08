@@ -1034,10 +1034,14 @@
     const titleLine = lines.find(line => normalizeMetadataLine(line).startsWith('title:'));
     const fallbackTitle = sourceHost;
     const title = titleLine ? titleLine.replace(/^title:\s*/i, '').trim() : fallbackTitle;
+    let metadataDone = false;
     const filtered = lines.filter(line => {
-      if (!line.trim()) return false;
+      if (metadataDone) return true;
+      if (!line.trim()) return true;
       const normalized = normalizeMetadataLine(line);
-      return !URL_METADATA_PREFIXES.some(prefix => normalized.startsWith(prefix));
+      const isMetadata = URL_METADATA_PREFIXES.some(prefix => normalized.startsWith(prefix));
+      if (!isMetadata) metadataDone = true;
+      return !isMetadata;
     });
     const content = filtered.join('\n').trim();
     return {
